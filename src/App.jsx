@@ -1,26 +1,69 @@
-import { useMemo, useState } from "react"
-import { stocks } from "./data/stocks"
+import { useEffect, useMemo, useState } from "react"
+import { getStockBySymbol, getStocks } from "./server/stockApi"
 import "./index.css"
 
 function App() {
-  // 1. Local UI state
+  // Local UI state
   const [selectedTab, setSelectedTab] = useState("overview")
   const [isWatchlistOpen, setIsWatchlistOpen] = useState(true)
 
-  // 2. Form/local state
+  // Form/local state
   const [searchText, setSearchText] = useState("")
 
-  // 3. Global client state later
-  // For now we keep selectedStock local.
-  // Later we will move this to URL or Redux.
+  // Currently local state. Later we can move this to URL or Redux.
   const [selectedSymbol, setSelectedSymbol] = useState("AAPL")
 
-  // 4. Server state later
-  // For now this comes from local dummy data.
-  // Later this will come from dummy APIs + React Query.
-  const selectedStock = stocks.find((stock) => stock.symbol === selectedSymbol)
+  // Server state: stocks list
+  const [stocks, setStocks] = useState([])
+  const [isStocksLoading, setIsStocksLoading] = useState(false)
+  const [stocksError, setStocksError] = useState(null)
 
-  // 5. Derived state
+  // Server state: selected stock details
+  const [selectedStock, setSelectedStock] = useState(null)
+  const [isSelectedStockLoading, setIsSelectedStockLoading] = useState(false)
+  const [selectedStockError, setSelectedStockError] = useState(null)
+
+  // Server state fetching: stock list
+  useEffect(() => {
+    async function loadStocks() {
+      try {
+        setIsStocksLoading(true)
+        setStocksError(null)
+
+        const data = await getStocks()
+
+        setStocks(data)
+      } catch (error) {
+        setStocksError(error)
+      } finally {
+        setIsStocksLoading(false)
+      }
+    }
+
+    loadStocks()
+  }, [])
+
+  // Server state fetching: selected stock
+  useEffect(() => {
+    async function loadSelectedStock() {
+      try {
+        setIsSelectedStockLoading(true)
+        setSelectedStockError(null)
+
+        const data = await getStockBySymbol(selectedSymbol)
+
+        setSelectedStock(data)
+      } catch (error) {
+        setSelectedStockError(error)
+      } finally {
+        setIsSelectedStockLoading(false)
+      }
+    }
+
+    loadSelectedStock()
+  }, [selectedSymbol])
+
+  // Derived state
   const filteredStocks = useMemo(() => {
     return stocks.filter((stock) => {
       const text = searchText.toLowerCase()
@@ -30,10 +73,11 @@ function App() {
         stock.name.toLowerCase().includes(text)
       )
     })
-  }, [searchText])
+  }, [stocks, searchText])
 
   const watchlist = ["AAPL", "MSFT"]
 
+  // Derived state
   const watchlistCount = watchlist.length
 
   return (
@@ -41,7 +85,7 @@ function App() {
       <header className="header">
         <div>
           <h1>Stock Architecture Lab</h1>
-          <p>React state, server state, caching, Redux, RTK Query, GraphQL</p>
+          <p>Manual server-state fetching before React Query</p>
         </div>
 
         <button onClick={() => setIsWatchlistOpen((value) => !value)}>
@@ -58,6 +102,10 @@ function App() {
             onChange={(event) => setSearchText(event.target.value)}
             placeholder="Search AAPL, MSFT..."
           />
+
+          {isStocksLoading && <p>Loading stocks...</p>}
+
+          {stocksError && <p className="error">{stocksError.message}</p>}
 
           <div className="stock-list">
             {filteredStocks.map((stock) => (
@@ -76,78 +124,97 @@ function App() {
         </aside>
 
         <section className="content">
-          <div className="card">
-            <div className="stock-header">
-              <div>
-                <h2>
-                  {selectedStock.symbol} — {selectedStock.name}
-                </h2>
-                <p>{selectedStock.sector}</p>
-              </div>
-
-              <div className="price">
-                <strong>£{selectedStock.price}</strong>
-                <span>{selectedStock.change}</span>
-              </div>
+          {isSelectedStockLoading && (
+            <div className="card">
+              <p>Loading selected stock...</p>
             </div>
-          </div>
+          )}
 
-          <div className="tabs">
-            <button
-              className={selectedTab === "overview" ? "active" : ""}
-              onClick={() => setSelectedTab("overview")}
-            >
-              Overview
-            </button>
+          {selectedStockError && (
+            <div className="card error">
+              <p>{selectedStockError.message}</p>
+            </div>
+          )}
 
-            <button
-              className={selectedTab === "fundamentals" ? "active" : ""}
-              onClick={() => setSelectedTab("fundamentals")}
-            >
-              Fundamentals
-            </button>
+          {!isSelectedStockLoading && selectedStock && (
+            <>
+              <div className="card">
+                <div className="stock-header">
+                  <div>
+                    <h2>
+                      {selectedStock.symbol} — {selectedStock.name}
+                    </h2>
+                    <p>{selectedStock.sector}</p>
+                  </div>
 
-            <button
-              className={selectedTab === "news" ? "active" : ""}
-              onClick={() => setSelectedTab("news")}
-            >
-              News
-            </button>
-          </div>
-
-          <div className="card">
-            {selectedTab === "overview" && (
-              <div>
-                <h3>Recommendation</h3>
-                <p>{selectedStock.recommendation}</p>
-              </div>
-            )}
-
-            {selectedTab === "fundamentals" && (
-              <div>
-                <h3>Fundamentals</h3>
-                <div className="grid">
-                  <p>Market Cap: {selectedStock.fundamentals.marketCap}</p>
-                  <p>P/E Ratio: {selectedStock.fundamentals.peRatio}</p>
-                  <p>EPS: {selectedStock.fundamentals.eps}</p>
-                  <p>
-                    Dividend Yield: {selectedStock.fundamentals.dividendYield}
-                  </p>
+                  <div className="price">
+                    <strong>£{selectedStock.price}</strong>
+                    <span>{selectedStock.change}</span>
+                  </div>
                 </div>
               </div>
-            )}
 
-            {selectedTab === "news" && (
-              <div>
-                <h3>Latest News</h3>
-                <ul>
-                  {selectedStock.news.map((item) => (
-                    <li key={item}>{item}</li>
-                  ))}
-                </ul>
+              <div className="tabs">
+                <button
+                  className={selectedTab === "overview" ? "active" : ""}
+                  onClick={() => setSelectedTab("overview")}
+                >
+                  Overview
+                </button>
+
+                <button
+                  className={selectedTab === "fundamentals" ? "active" : ""}
+                  onClick={() => setSelectedTab("fundamentals")}
+                >
+                  Fundamentals
+                </button>
+
+                <button
+                  className={selectedTab === "news" ? "active" : ""}
+                  onClick={() => setSelectedTab("news")}
+                >
+                  News
+                </button>
               </div>
-            )}
-          </div>
+
+              <div className="card">
+                {selectedTab === "overview" && (
+                  <div>
+                    <h3>Recommendation</h3>
+                    <p>{selectedStock.recommendation}</p>
+                  </div>
+                )}
+
+                {selectedTab === "fundamentals" && (
+                  <div>
+                    <h3>Fundamentals</h3>
+                    <div className="grid">
+                      <p>
+                        Market Cap: {selectedStock.fundamentals.marketCap}
+                      </p>
+                      <p>P/E Ratio: {selectedStock.fundamentals.peRatio}</p>
+                      <p>EPS: {selectedStock.fundamentals.eps}</p>
+                      <p>
+                        Dividend Yield:{" "}
+                        {selectedStock.fundamentals.dividendYield}
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {selectedTab === "news" && (
+                  <div>
+                    <h3>Latest News</h3>
+                    <ul>
+                      {selectedStock.news.map((item) => (
+                        <li key={item}>{item}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
         </section>
 
         {isWatchlistOpen && (

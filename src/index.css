@@ -182,4 +182,8 @@ input {
   .price {
     text-align: left;
   }
+  
+  .error {
+  color: #b91c1c;
+}
 }
